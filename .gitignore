@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+releases/
+*.zip
+*.spec
+voice-mic.log
+voice-targets.json
+mic-position.json
+.env
+.DS_Store
+Thumbs.db
