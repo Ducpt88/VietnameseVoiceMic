@@ -25,6 +25,7 @@ from pathlib import Path
 import os
 import sys
 import tempfile
+import wave
 
 import speech_recognition as sr
 
@@ -47,9 +48,12 @@ SETTINGS_FILE = APP_DIR / "voice-mic-settings.json"
 CONTEXT_FILE = APP_DIR / "voice-context.json"
 LOG_FILE = APP_DIR / "voice-mic.log"
 LOCK_FILE = APP_DIR / "voice-mic.lock"
+LAST_TRANSCRIPT_FILE = APP_DIR / "voice-last.txt"
+TRANSCRIPT_HISTORY_FILE = APP_DIR / "voice-transcripts.jsonl"
+LAST_AUDIO_FILE = APP_DIR / "voice-last.wav"
 APP_TITLE = "Vietnamese Voice Mic"
 APP_VERSION = "1.1.0"
-APP_BUILD = "mic-safer-vad-dictation-2026-07-05"
+APP_BUILD = "mic-recovery-clipboard-2026-07-05"
 SIZE = 38
 CORE = 26
 HUD_WIDTH = 220
@@ -402,6 +406,52 @@ def log(message: str) -> None:
         return
 
 
+def save_last_transcript(text: str, metadata: dict[str, object] | None = None) -> None:
+    text = text.strip()
+    if not text:
+        return
+    metadata = metadata or {}
+    record = {
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "text": text,
+        **metadata,
+    }
+    try:
+        LAST_TRANSCRIPT_FILE.write_text(text, encoding="utf-8")
+    except Exception as exc:
+        log(f"last transcript save error: {type(exc).__name__}: {exc}")
+    try:
+        with TRANSCRIPT_HISTORY_FILE.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as exc:
+        log(f"transcript history save error: {type(exc).__name__}: {exc}")
+
+
+def save_last_audio(audio: sr.AudioData, metadata: dict[str, object] | None = None) -> None:
+    metadata = metadata or {}
+    try:
+        with wave.open(str(LAST_AUDIO_FILE), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(audio.sample_width)
+            wav.setframerate(audio.sample_rate)
+            wav.writeframes(audio.frame_data)
+        log(
+            f"last audio saved | path={LAST_AUDIO_FILE.name} | "
+            f"bytes={len(audio.frame_data)} | metadata={metadata}"
+        )
+    except Exception as exc:
+        log(f"last audio save error: {type(exc).__name__}: {exc}")
+
+
+def keep_transcript_on_clipboard(text: str, reason: str) -> bool:
+    ok = set_clipboard_text_retry(text)
+    if ok:
+        log(f"recovery clipboard set | reason={reason} | text={text[:80]}")
+    else:
+        log(f"recovery clipboard failed | reason={reason} | text={text[:80]}")
+    return ok
+
+
 def acquire_single_instance_lock() -> bool:
     global SINGLE_INSTANCE_MUTEX_HANDLE, SINGLE_INSTANCE_LOCK_FILE_HANDLE
     try:
@@ -610,14 +660,9 @@ def paste_to_focused_field(
     if not text:
         return
     if target_hwnd and not window_exists(target_hwnd):
+        keep_transcript_on_clipboard(text, "target-closed")
         log(f"paste skipped: target window closed | hwnd={target_hwnd} | text={text[:120]}")
         return
-    # Save clipboard before overwriting so we can restore it afterwards
-    old_clipboard = ""
-    try:
-        old_clipboard = get_clipboard_text()
-    except Exception:
-        pass
     try:
         set_clipboard_text(text)
         time.sleep(0.08)
@@ -629,12 +674,8 @@ def paste_to_focused_field(
         send_ctrl_v()
         log(f"paste sent | hwnd={target_hwnd} | focused={focused_hwnd} | point={target_point}")
     finally:
-        # Restore previous clipboard content so user's data isn't lost
         time.sleep(0.12)
-        try:
-            set_clipboard_text(old_clipboard)
-        except Exception:
-            pass
+        keep_transcript_on_clipboard(text, "after-paste")
         if restore_root:
             root.deiconify()
             root.lift()
@@ -2729,6 +2770,15 @@ class MicIconApp:
             self.root.after(0, lambda: self.draw("busy"))
             self.root.after(0, lambda sid=session_id: self.show_hud("busy", f"\u0110ang nh\u1eadn di\u1ec7n #{sid}", None))
             audio = sr.AudioData(b"".join(audio_frames), sample_rate, sample_width)
+            save_last_audio(
+                audio,
+                {
+                    "session_id": session_id,
+                    "hwnd": target_hwnd,
+                    "reason": stop_reason,
+                    "frames": len(audio_frames),
+                },
+            )
             final_text = self._transcribe_audio(audio).strip()
             api_ms = int((time.monotonic() - t_api) * 1000)
             if not final_text:
@@ -2749,6 +2799,19 @@ class MicIconApp:
                 f"frames={len(audio_frames)} | wpm={wpm} | words={word_count} | chars={char_count} | "
                 f"duration={measured_seconds:.1f}s | confidence_avg={format_confidence_percent(avg_confidence)}"
             )
+            save_last_transcript(
+                final_text,
+                {
+                    "session_id": session_id,
+                    "hwnd": target_hwnd,
+                    "point": target_point,
+                    "reason": stop_reason,
+                    "confidence": confidence_text,
+                    "duration_seconds": round(measured_seconds, 2),
+                    "chars": char_count,
+                },
+            )
+            keep_transcript_on_clipboard(final_text, "recognized")
             learn_context_terms(final_text)
             self.root.after(0, lambda t=final_text, hw=target_hwnd, pt=target_point:
                 self.paste_chunk(t, hw, pt, click_to_focus=True))
@@ -2791,9 +2854,9 @@ class MicIconApp:
         """Paste má»™t chunk ngay láº­p tá»©c, giá»¯ icon hiá»ƒn thá»‹ Ä‘á»ƒ tiáº¿p tá»¥c nghe."""
         try:
             if target_hwnd and not window_exists(target_hwnd):
+                keep_transcript_on_clipboard(text, "target-closed")
                 log(f"chunk paste skipped: target window closed | hwnd={target_hwnd} | text={text[:120]}")
                 return
-            old_clip = get_clipboard_text()
             if not set_clipboard_text_retry(text):
                 log(f"chunk paste skipped: clipboard busy; text={text[:120]}")
                 return
@@ -2810,10 +2873,10 @@ class MicIconApp:
             )
             send_ctrl_v()
             time.sleep(0.05)
-            if not set_clipboard_text_retry(old_clip, attempts=3, delay=0.05):
-                log("clipboard restore failed; transcript left in clipboard")
-            log(f"chunk pasted: {text[:60]}")
+            keep_transcript_on_clipboard(text, "after-paste")
+            log(f"chunk pasted; transcript kept on clipboard: {text[:60]}")
         except Exception as exc:
+            keep_transcript_on_clipboard(text, "paste-error")
             log(f"chunk paste error: {type(exc).__name__}: {exc}")
 
     def run(self) -> None:

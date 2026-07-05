@@ -11,6 +11,8 @@ Ung dung Windows chay nen de nhap tieng Viet bang giong noi vao o chat/input.
 - Toi uu cho doan noi dai: cat chunk tai vung am luong thap, gui chunk song song, ghep bo trung lap.
 - HUD/vong tron hien trang thai: dang nghe, dang nhan dien, da co text.
 - Bao ve dan nham: neu cua so target da dong thi bo qua dan.
+- Recovery: transcript moi nhat duoc giu tren clipboard, luu vao `voice-last.txt`,
+  lich su luu vao `voice-transcripts.jsonl`, audio gan nhat luu vao `voice-last.wav`.
 - Co the build ban Windows `.exe`, tao zip release va manifest update.
 
 ## Cach dung nhanh
@@ -20,7 +22,19 @@ Ung dung Windows chay nen de nhap tieng Viet bang giong noi vao o chat/input.
 3. Khi vong tron hien `DANG NGHE`, noi noi dung can nhap.
 4. Khi ban ngung noi, app doi sang `DANG NHAN DIEN`.
 5. Khi co ket qua, app hien preview va tu dan vao dung vi tri da `Alt + click`.
-6. Khi dang nghe, bam `Esc` de dung va xu ly phan audio da thu.
+6. Sau khi app nhan dien, ban co the bam `Ctrl+V` de dan lai transcript moi nhat neu can.
+7. Khi dang nghe, bam `Esc` de dung va xu ly phan audio da thu.
+
+## Cuu lai noi dung vua noi
+
+Neu app cat cau, dan loi, hoac ban doi cua so lam target khong con dung:
+
+- Bam `Ctrl+V` de dan lai transcript moi nhat vi app giu no tren clipboard.
+- Mo `voice-last.txt` de xem transcript moi nhat.
+- Mo `voice-transcripts.jsonl` de xem lich su cac lan nhan dien.
+- File `voice-last.wav` giu audio gan nhat, huu ich khi can kiem tra lai am thanh da thu.
+
+Nhung file recovery nay nam tren may cua ban va da duoc dua vao `.gitignore`, khong day len GitHub.
 
 ## Cau hinh mic
 
@@ -170,6 +184,9 @@ Neu muon dung auto-update, upload `VietnameseVoiceMic-windows.zip` va `version.j
 - `voice_mic_icon.py`: code app chinh.
 - `voice-mic-settings.json`: cau hinh mic, context, update.
 - `voice-context.json`: bo nho thuat ngu goi y cho nhan dien.
+- `voice-last.txt`: transcript moi nhat de cuu lai khi can.
+- `voice-transcripts.jsonl`: lich su transcript tren may local.
+- `voice-last.wav`: audio gan nhat da thu tren may local.
 - `Start Vietnamese Voice Mic.cmd`: chay app tu source.
 - `Start-VietnameseVoiceMic.ps1`: restart app va dam bao chi con mot instance.
 - `build.ps1`: build exe, zip release va manifest.

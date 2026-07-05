@@ -9,6 +9,9 @@ releases/
 *.spec
 voice-mic.log
 voice-mic.lock
+voice-last.txt
+voice-last.wav
+voice-transcripts.jsonl
 voice-targets.json
 mic-position.json
 .env
