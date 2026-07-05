@@ -8,6 +8,7 @@ releases/
 *.zip
 *.spec
 voice-mic.log
+voice-mic.lock
 voice-targets.json
 mic-position.json
 .env

@@ -1,49 +1,36 @@
 # Vietnamese Voice Mic
 
-Vietnamese Voice Mic là ứng dụng Windows chạy nền để nhập tiếng Việt bằng giọng nói vào ô chat/input.
+Ung dung Windows chay nen de nhap tieng Viet bang giong noi vao o chat/input.
 
-## Tính năng
+## Tinh nang chinh
 
-- Chạy nền, không hiện nút mic nổi 24/24.
-- Chỉ bật khi giữ `Alt` và click chuột trái vào ô chat/input.
-- Tự nghe một câu, khi bạn ngừng nói thì tự xử lý.
-- Dán text một lần vào đúng vị trí đã `Alt + click` ban đầu.
-- Ưu tiên Google Speech Recognition tiếng Việt để nhận diện chính xác hơn.
-- Có thể cài tự chạy cùng Windows.
+- Kich hoat bang `Alt + click chuot trai` vao dung o muon nhap.
+- Khoa cua so va vi tri ban dau, sau khi nhan dien se dan lai dung vi tri do.
+- Nhan dien tieng Viet bang Google Speech Recognition, co confidence trong log/HUD khi Google tra ve.
+- VAD bang WebRTC/RMS de biet khi nao dang noi va khi nao da ngung.
+- Toi uu cho doan noi dai: cat chunk tai vung am luong thap, gui chunk song song, ghep bo trung lap.
+- HUD/vong tron hien trang thai: dang nghe, dang nhan dien, da co text.
+- Bao ve dan nham: neu cua so target da dong thi bo qua dan.
+- Co the build ban Windows `.exe`, tao zip release va manifest update.
 
-## Cách dùng nhanh
+## Cach dung nhanh
 
-1. Chạy `Start Vietnamese Voice Mic.cmd`.
-2. Giữ `Alt` và click chuột trái vào ô chat/input muốn nhập.
-3. Khi thấy `Hãy nói đi Sếp ơi!`, hãy nói câu cần nhập.
-4. Khi app hiện `Tèn tén tén ten....!`, app đang xử lý và sẽ tự dán text.
-5. Khi đang nghe, bấm `Esc` để dừng nhanh.
+1. Chay `Start Vietnamese Voice Mic.cmd`.
+2. Giu `Alt` va click chuot trai vao o chat/input muon nhap.
+3. Khi vong tron hien `DANG NGHE`, noi noi dung can nhap.
+4. Khi ban ngung noi, app doi sang `DANG NHAN DIEN`.
+5. Khi co ket qua, app hien preview va tu dan vao dung vi tri da `Alt + click`.
+6. Khi dang nghe, bam `Esc` de dung va xu ly phan audio da thu.
 
-## Cài tự chạy cùng Windows
+## Cau hinh mic
 
-Chạy PowerShell tại thư mục project:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install-startup.ps1
-```
-
-Từ lần sau mở máy hoặc đăng nhập Windows, app sẽ tự chạy nền.
-
-Muốn gỡ auto-start:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\uninstall-startup.ps1
-```
-
-## Cấu hình mic
-
-File cấu hình nằm ở:
+File cau hinh:
 
 ```text
 voice-mic-settings.json
 ```
 
-Ví dụ muốn ưu tiên một mic cụ thể:
+Vi du:
 
 ```json
 {
@@ -53,22 +40,28 @@ Ví dụ muốn ưu tiên một mic cụ thể:
     "USB Audio Device",
     "Microphone",
     "Headset"
-  ]
+  ],
+  "enable_particle_effect": true,
+  "enable_context_memory": true
 }
 ```
 
-Nếu để `"preferred_microphone": ""`, app sẽ tự chọn mic đầu tiên khớp `microphone_name_hints`.
+Neu muon app tu chon mic theo danh sach goi y, dat:
 
-## Chạy từ source code
+```json
+"preferred_microphone": ""
+```
 
-Yêu cầu:
+## Chay tu source
+
+Yeu cau:
 
 - Windows 10/11
-- Python 3.10 trở lên
-- Microphone hoạt động
-- Internet nếu muốn dùng Google Speech Recognition
+- Python 3.10 tro len
+- Microphone hoat dong
+- Internet de dung Google Speech Recognition
 
-Cài thư viện:
+Cai thu vien:
 
 ```powershell
 python -m venv .venv
@@ -77,74 +70,109 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Chạy app:
+Chay app:
 
 ```powershell
 python .\voice_mic_icon.py
 ```
 
-Hoặc chạy file:
+Hoac:
 
 ```text
 Start Vietnamese Voice Mic.cmd
 ```
 
-## Đóng gói thành app gửi cho người khác
+## Cai tu chay cung Windows
 
-Chạy:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1
-```
-
-Sau khi build xong, app nằm tại:
-
-```text
-dist\VietnameseVoiceMic\VietnameseVoiceMic.exe
-```
-
-Gửi nguyên thư mục này cho người khác:
-
-```text
-dist\VietnameseVoiceMic
-```
-
-Người nhận chỉ cần mở:
-
-```text
-VietnameseVoiceMic.exe
-```
-
-Nếu muốn app tự chạy cùng Windows trên máy người nhận, chạy trong thư mục app đã build:
+Chay PowerShell tai thu muc project:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-startup.ps1
 ```
 
-## Bản offline Whisper tùy chọn
-
-Mặc định app dùng Google trước để nhận diện tiếng Việt tốt hơn và nhẹ hơn.
-
-Nếu muốn cài thêm Whisper offline:
+Go auto-start:
 
 ```powershell
-pip install -r requirements-whisper.txt
+powershell -ExecutionPolicy Bypass -File .\uninstall-startup.ps1
 ```
 
-Lưu ý: Whisper/Torch rất nặng, build ra file lớn và máy yếu có thể chạy chậm.
+## Build ban phat hanh
 
-## File quan trọng
+Chay:
 
-- `voice_mic_icon.py`: code app chính.
-- `voice-mic-settings.json`: cấu hình mic.
-- `Start Vietnamese Voice Mic.cmd`: chạy app từ source.
-- `build.ps1`: đóng gói app bằng PyInstaller.
-- `install-startup.ps1`: cài auto-start cùng Windows.
-- `uninstall-startup.ps1`: gỡ auto-start.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+```
 
-## Xử lý lỗi thường gặp
+Ket qua:
 
-- Không nhận giọng: kiểm tra mic trong Windows, rồi chỉnh `preferred_microphone`.
-- Nhận sai nhiều: nói gần mic hơn, giảm tiếng nền, hoặc thử mic khác.
-- App không tự bật: phải giữ `Alt` trong lúc click chuột trái vào ô input.
-- Không dán đúng chỗ: hãy `Alt + click` đúng vào vùng nhập text trước khi nói.
+```text
+dist\VietnameseVoiceMic\VietnameseVoiceMic.exe
+releases\VietnameseVoiceMic-windows.zip
+releases\version.json
+```
+
+Gui thu muc nay cho nguoi khac:
+
+```text
+dist\VietnameseVoiceMic
+```
+
+Hoac upload zip trong `releases` len GitHub Release.
+
+## Day len GitHub
+
+Kiem tra thay doi:
+
+```powershell
+git status
+git diff --stat
+```
+
+Commit:
+
+```powershell
+git add .
+git commit -m "Improve Vietnamese Voice Mic dictation"
+```
+
+Push len GitHub:
+
+```powershell
+git push origin main
+```
+
+## Cap nhat ban moi
+
+Build script tao `releases\version.json` gom:
+
+- `version`
+- `zip_url`
+- `sha256`
+- `notes`
+
+Neu muon dung auto-update, upload `VietnameseVoiceMic-windows.zip` va `version.json` len cung mot noi, sau do dien URL manifest vao:
+
+```json
+"update_manifest_url": "https://example.com/version.json"
+```
+
+## Xu ly loi thuong gap
+
+- Khong nhan giong: kiem tra mic trong Windows va `preferred_microphone`.
+- Bi cat cau som: tang `WEBRTC_VOICE_END_SECONDS` va `RMS_VOICE_END_SECONDS` trong `voice_mic_icon.py`.
+- Nhan sai nhieu: noi gan mic hon, giam tieng nen, hoac them tu khoa vao `speech_context_terms`.
+- Khong dan dung cho: hay `Alt + click` dung vao o input truoc khi noi.
+- App khong bat: phai giu `Alt` trong luc click chuot trai vao o input.
+
+## File quan trong
+
+- `voice_mic_icon.py`: code app chinh.
+- `voice-mic-settings.json`: cau hinh mic, context, update.
+- `voice-context.json`: bo nho thuat ngu goi y cho nhan dien.
+- `Start Vietnamese Voice Mic.cmd`: chay app tu source.
+- `Start-VietnameseVoiceMic.ps1`: restart app va dam bao chi con mot instance.
+- `build.ps1`: build exe, zip release va manifest.
+- `updater.ps1`: helper cap nhat ban moi.
+- `install-startup.ps1`: cai auto-start cung Windows.
+- `uninstall-startup.ps1`: go auto-start.

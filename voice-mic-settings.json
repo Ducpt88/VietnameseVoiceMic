@@ -1,5 +1,5 @@
 {
-  "preferred_microphone": "",
+  "preferred_microphone": "BKD-11 Pro Audio",
   "microphone_name_hints": [
     "BKD-11 Pro Audio",
     "UGREEN Camera 2K",
@@ -7,5 +7,65 @@
     "BKD-11",
     "Microphone",
     "Headset"
+  ],
+  "enable_context_memory": true,
+  "enable_particle_effect": true,
+  "particle_effect_count": 180,
+  "enable_whisper_fallback": false,
+  "whisper_model": "base",
+  "auto_update_enabled": true,
+  "update_manifest_url": "",
+  "speech_cleanup_replacements": [
+    {
+      "pattern": "\\bvoi\\b",
+      "replacement": "voice",
+      "regex": true
+    },
+    {
+      "pattern": "\\bapp\\b",
+      "replacement": "app",
+      "regex": true
+    },
+    {
+      "pattern": "\\btext\\b",
+      "replacement": "text",
+      "regex": true
+    },
+    {
+      "pattern": "\\bmic\\b",
+      "replacement": "mic",
+      "regex": true
+    },
+    {
+      "pattern": "\\bvoice mic\\b",
+      "replacement": "Voice Mic",
+      "regex": true
+    }
+  ],
+  "speech_context_terms": [
+    "Codex",
+    "Claude Code",
+    "ChatGPT",
+    "OpenAI",
+    "prompt",
+    "agent",
+    "workflow",
+    "template",
+    "format",
+    "speech-to-text",
+    "VAD",
+    "WebRTC",
+    "Google Speech Recognition",
+    "Voice Mic",
+    "HTML",
+    "CSS",
+    "JavaScript",
+    "Python",
+    "API",
+    "frontend",
+    "backend",
+    "video format",
+    "text",
+    "cleanup"
   ]
 }

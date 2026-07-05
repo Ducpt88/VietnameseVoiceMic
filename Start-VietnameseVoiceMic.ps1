@@ -1,5 +1,9 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+if (-not (Test-Path $Python)) {
+  $Python = "python"
+}
 
 # Close the old browser-based mic app if it is still around.
 Get-CimInstance Win32_Process |
@@ -16,8 +20,12 @@ Get-CimInstance Win32_Process |
 # Keep only one native mic icon instance.
 Get-CimInstance Win32_Process |
   Where-Object {
-    $_.Name -eq 'python.exe' -and
-    $_.CommandLine -like '*voice_mic_icon.py*'
+    (
+      $_.Name -match '^pythonw?\.exe$' -and
+      $_.CommandLine -like '*voice_mic_icon.py*'
+    ) -or (
+      $_.Name -eq 'VietnameseVoiceMic.exe'
+    )
   } |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 
@@ -26,5 +34,5 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
   "-ExecutionPolicy",
   "Bypass",
   "-Command",
-  "Set-Location '$Root'; python .\voice_mic_icon.py"
+  "Set-Location '$Root'; & '$Python' .\voice_mic_icon.py"
 )
