@@ -14,6 +14,8 @@ Ung dung Windows chay nen de nhap tieng Viet bang giong noi vao o chat/input.
 - Recovery: transcript moi nhat duoc giu tren clipboard, luu vao `voice-last.txt`,
   lich su luu vao `voice-transcripts.jsonl`, audio gan nhat luu vao `voice-last.wav`.
 - Co the build ban Windows `.exe`, tao zip release va manifest update.
+- Auto-update doc manifest tu GitHub Release latest.
+- Du lieu ca nhan/context hoc rieng luu local va khong dua len GitHub.
 
 ## Cach dung nhanh
 
@@ -164,11 +166,19 @@ Build script tao `releases\version.json` gom:
 - `zip_url`
 - `sha256`
 - `notes`
+- `release_url`
 
-Neu muon dung auto-update, upload `VietnameseVoiceMic-windows.zip` va `version.json` len cung mot noi, sau do dien URL manifest vao:
+Auto-update mac dinh doc manifest tai:
 
-```json
-"update_manifest_url": "https://example.com/version.json"
+```text
+https://github.com/Ducpt88/VietnameseVoiceMic/releases/latest/download/version.json
+```
+
+Khi tao ban moi, chay `build.ps1`, sau do upload 2 file nay len GitHub Release:
+
+```text
+releases\VietnameseVoiceMic-windows.zip
+releases\version.json
 ```
 
 ## Xu ly loi thuong gap
@@ -183,7 +193,9 @@ Neu muon dung auto-update, upload `VietnameseVoiceMic-windows.zip` va `version.j
 
 - `voice_mic_icon.py`: code app chinh.
 - `voice-mic-settings.json`: cau hinh mic, context, update.
-- `voice-context.json`: bo nho thuat ngu goi y cho nhan dien.
+- `voice-mic-settings.local.json`: cau hinh rieng cua tung may, khong dua len GitHub.
+- `voice-context.json`: bo nho public mac dinh, khong chua transcript ca nhan.
+- `voice-context.local.json`: bo nho hoc rieng cua tung may, khong dua len GitHub.
 - `voice-last.txt`: transcript moi nhat de cuu lai khi can.
 - `voice-transcripts.jsonl`: lich su transcript tren may local.
 - `voice-last.wav`: audio gan nhat da thu tren may local.

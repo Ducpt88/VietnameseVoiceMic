@@ -1,3 +1,3 @@
 @echo off
 cd /d "%~dp0"
-powershell -ExecutionPolicy Bypass -File ".\Start-VietnameseVoiceMic.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ".\Start-VietnameseVoiceMic.ps1"

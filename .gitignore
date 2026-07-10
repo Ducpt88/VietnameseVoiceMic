@@ -13,6 +13,10 @@ voice-last.txt
 voice-last.wav
 voice-transcripts.jsonl
 voice-targets.json
+voice-context.local.json
+voice-mic-settings.local.json
+voice-mic-start.log
+voice-mic-crash.log
 mic-position.json
 .env
 .DS_Store

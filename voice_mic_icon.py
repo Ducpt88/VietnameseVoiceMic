@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import ctypes
-import audioop
 import concurrent.futures
 import hashlib
 import json
@@ -18,6 +17,7 @@ import time
 import tkinter as tk
 import urllib.parse
 import urllib.request
+import warnings
 import winsound
 from ctypes import wintypes
 from pathlib import Path
@@ -27,6 +27,10 @@ import sys
 import tempfile
 import wave
 
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*audioop.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
+
+import audioop
 import speech_recognition as sr
 
 _whisper = None
@@ -45,15 +49,17 @@ APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
 STATE_FILE = APP_DIR / "mic-position.json"
 TARGETS_FILE = APP_DIR / "voice-targets.json"
 SETTINGS_FILE = APP_DIR / "voice-mic-settings.json"
+LOCAL_SETTINGS_FILE = APP_DIR / "voice-mic-settings.local.json"
 CONTEXT_FILE = APP_DIR / "voice-context.json"
+LOCAL_CONTEXT_FILE = APP_DIR / "voice-context.local.json"
 LOG_FILE = APP_DIR / "voice-mic.log"
 LOCK_FILE = APP_DIR / "voice-mic.lock"
 LAST_TRANSCRIPT_FILE = APP_DIR / "voice-last.txt"
 TRANSCRIPT_HISTORY_FILE = APP_DIR / "voice-transcripts.jsonl"
 LAST_AUDIO_FILE = APP_DIR / "voice-last.wav"
 APP_TITLE = "Vietnamese Voice Mic"
-APP_VERSION = "1.1.0"
-APP_BUILD = "mic-recovery-clipboard-2026-07-05"
+APP_VERSION = "1.1.1"
+APP_BUILD = "public-autoupdate-2026-07-10"
 SIZE = 38
 CORE = 26
 HUD_WIDTH = 220
@@ -70,7 +76,7 @@ MAX_SPEECH_CHUNK_SECONDS = 18.0
 MIN_SPEECH_CHUNK_SECONDS = 0.45
 SILENCE_END_SECONDS = 2.0
 MAX_UNRECOGNIZED_BEFORE_STOP = 3
-VOICE_START_FRAMES = 1
+VOICE_START_FRAMES = 2
 VAD_MIN_THRESHOLD = 220
 VAD_NOISE_MULTIPLIER = 1.35
 VAD_NOISE_MARGIN = 160
@@ -80,7 +86,7 @@ VAD_ACTIVITY_MARGIN = 80
 VAD_ACTIVITY_MULTIPLIER = 1.12
 WEBRTC_RMS_MIN_GATE = 220
 WEBRTC_RMS_NOISE_RATIO = 0.65
-WEBRTC_VAD_AGGRESSIVENESS = 1
+WEBRTC_VAD_AGGRESSIVENESS = 2
 WEBRTC_VAD_SAMPLE_RATE = 16000
 WEBRTC_SHORT_VOICE_END_SECONDS = 1.45
 RMS_SHORT_VOICE_END_SECONDS = 1.65
@@ -91,13 +97,16 @@ MIN_CAPTURE_BEFORE_AUTO_STOP_SECONDS = 1.2
 VAD_SOFT_ACTIVITY_MARGIN = 120
 VAD_SOFT_ACTIVITY_MULTIPLIER = 1.08
 GOOGLE_RECOGNITION_TIMEOUT_SECONDS = 20.0
-GOOGLE_SINGLE_PASS_MAX_SECONDS = 28.0
-GOOGLE_LONG_CHUNK_SECONDS = 24.0
+GOOGLE_SINGLE_PASS_MAX_SECONDS = 20.0
+GOOGLE_LONG_CHUNK_SECONDS = 16.0
 GOOGLE_CHUNK_BOUNDARY_SEARCH_SECONDS = 2.5
-GOOGLE_CHUNK_MIN_SECONDS = 8.0
-GOOGLE_CHUNK_MIN_TAIL_SECONDS = 4.0
+GOOGLE_CHUNK_MIN_SECONDS = 5.0
+GOOGLE_CHUNK_MIN_TAIL_SECONDS = 3.0
 GOOGLE_MIN_RETRY_CHUNK_SECONDS = 4.0
 GOOGLE_CHUNK_RETRY_ATTEMPTS = 2
+GOOGLE_LOW_CONFIDENCE_FALLBACK_THRESHOLD = 0.82
+VOICE_CONTEXT_MAX_TERMS = 300
+VOICE_CONTEXT_MAX_PHRASES = 220
 TRANSPARENT = "#ff00ff"
 LISTEN_CHUNK_SECONDS = 8
 LISTEN_TIMEOUT_SECONDS = 8.0
@@ -250,10 +259,17 @@ def save_voice_targets(targets: dict[str, tuple[int, int]]) -> None:
 
 
 def load_settings() -> dict[str, object]:
-    try:
-        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    settings: dict[str, object] = {}
+    for path in (SETTINGS_FILE, LOCAL_SETTINGS_FILE):
+        try:
+            if not path.exists():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                settings.update(data)
+        except Exception as exc:
+            log(f"settings load skipped | path={path.name} | {type(exc).__name__}: {exc}")
+    return settings
 
 
 def microphone_name_score(name: str) -> int:
@@ -283,7 +299,7 @@ def first_matching_microphone(names: list[str], needle: str) -> tuple[int, str] 
 
 def select_microphone_device(settings: dict[str, object]) -> tuple[int | None, str]:
     preferred = str(settings.get("preferred_microphone", "") or "").strip().lower()
-    fallback_hints = settings.get("microphone_name_hints", ["UGREEN Camera 2K", "USB Audio Device", "BKD-11"])
+    fallback_hints = settings.get("microphone_name_hints", ["Microphone", "Headset", "USB Audio Device", "External Microphone"])
     hints = [str(h).lower() for h in fallback_hints if str(h).strip()]
     names = sr.Microphone.list_microphone_names()
 
@@ -934,6 +950,108 @@ _TECH_TERM_PATTERNS = (
     (r"\bvoice\s*mic\b", "Voice Mic"),
     (r"\bspeech\s*to\s*text\b", "speech-to-text"),
 )
+_VIETNAMESE_COMMAND_TERMS = (
+    "app",
+    "codex",
+    "voice mic",
+    "chatgpt",
+    "google",
+    "whisper",
+    "prompt",
+    "workflow",
+    "template",
+    "format",
+    "frontend",
+    "backend",
+    "api",
+    "html",
+    "css",
+    "javascript",
+    "python",
+    "d\u1ef1 \u00e1n",
+    "giao di\u1ec7n",
+    "t\u00ednh n\u0103ng",
+    "nh\u1eadn di\u1ec7n",
+    "gi\u1ecdng n\u00f3i",
+    "micro",
+    "l\u1ec7nh",
+    "ra l\u1ec7nh",
+    "ki\u1ec3m tra",
+    "ki\u1ec3m tra k\u1ef9",
+    "ch\u1ec9nh",
+    "ch\u1ec9nh s\u1eeda",
+    "s\u1eeda",
+    "fix",
+    "fix l\u1ea1i",
+    "t\u1ed1i \u01b0u",
+    "b\u1ed5 sung",
+    "c\u1eadp nh\u1eadt",
+    "kh\u1edfi \u0111\u1ed9ng",
+    "m\u1edf",
+    "\u0111\u00f3ng",
+    "k\u00e9o",
+    "thu nh\u1ecf",
+    "m\u1edf r\u1ed9ng",
+    "ch\u00ednh x\u00e1c",
+)
+_PERSONAL_PHRASE_SEEDS = (
+    "ki\u1ec3m tra k\u1ef9",
+    "xem l\u1ea1i k\u1ef9",
+    "ch\u1ec9nh s\u1eeda l\u1ea1i cho t\u00f4i",
+    "b\u1ed5 sung ph\u1ea7n n\u00e0y",
+    "t\u1ed1i \u01b0u ph\u1ea7n n\u00e0y",
+    "kh\u1edfi \u0111\u1ed9ng l\u1ea1i",
+    "cho t\u00f4i xem n\u00e0o",
+    "theo \u0111\u00fang m\u1ee5c ti\u00eau",
+    "kh\u00f4ng \u0111\u00fang m\u1ee5c ti\u00eau",
+    "giao kh\u00f4ng \u0111\u00fang m\u1ee5c ti\u00eau",
+    "kh\u00f4ng b\u1ecb c\u1eaft x\u00e9n",
+    "hi\u1ec3n th\u1ecb \u0111\u1ea7y \u0111\u1ee7",
+    "m\u1edf r\u1ed9ng b\u00ean tr\u00ean",
+    "m\u1edf r\u1ed9ng b\u00ean d\u01b0\u1edbi",
+    "thu nh\u1ecf l\u1ea1i",
+    "k\u00e9o l\u00ean k\u00e9o xu\u1ed1ng",
+    "c\u1eadp nh\u1eadt th\u1ef1c t\u1ebf",
+    "b\u00e1o c\u00e1o ch\u00ednh x\u00e1c",
+    "c\u00e1ch t\u00f4i n\u00f3i chuy\u1ec7n",
+    "c\u00e1ch t\u00f4i ra vi\u1ec7c",
+    "t\u1eeb \u0111i\u1ec3n c\u00e1 nh\u00e2n",
+)
+_PHRASE_LEARN_PATTERNS = (
+    r"\b(?:ki\u1ec3m tra|xem l\u1ea1i|ch\u1ec9nh|ch\u1ec9nh s\u1eeda|s\u1eeda|fix|b\u1ed5 sung|t\u1ed1i \u01b0u|c\u1eadp nh\u1eadt|kh\u1edfi \u0111\u1ed9ng|thu nh\u1ecf|m\u1edf r\u1ed9ng|k\u00e9o|hi\u1ec3n th\u1ecb|b\u00e1o c\u00e1o)\b(?:\s+\S+){0,6}",
+    r"\b(?:kh\u00f4ng b\u1ecb|kh\u00f4ng ph\u1ea3i|kh\u00f4ng \u0111\u00fang|theo \u0111\u00fang|cho t\u00f4i|c\u1ee7a t\u00f4i)\b(?:\s+\S+){0,7}",
+    r"\b(?:c\u00e1ch t\u00f4i|t\u1eeb \u0111i\u1ec3n|ng\u00f4n t\u1eeb|ng\u00f4n ng\u1eef|m\u1ee5c ti\u00eau)\b(?:\s+\S+){0,7}",
+)
+_CONTEXT_PHRASE_BLOCKLIST = {
+    "cho tôi",
+    "cho tôi đi",
+    "cho tôi nào",
+    "của tôi",
+    "đúng không",
+    "ví dụ",
+    "ví dụ như",
+    "như vậy",
+    "cái này",
+    "cái kia",
+    "phần này",
+    "mục này",
+    "xem nào",
+}
+_VIETNAMESE_CLEANUP_PATTERNS = (
+    (r"\bcon\s+ap\b", "con app"),
+    (r"\b\u00e1p\b", "app"),
+    (r"\b\u1ed1p\b", "app"),
+    (r"\bth\u00edch\s+l\u1ea1i\b", "fix l\u1ea1i"),
+    (r"\bt\u1ed1i\s+v\u1ec1\b", "t\u1ed1i \u01b0u v\u1ec1"),
+    (r"\bt\u1ed1i\s+v\u00e0\b", "t\u1ed1i \u01b0u"),
+    (r"\bki\u1ec3m\s+tra\s+k\u00fd\b", "ki\u1ec3m tra k\u1ef9"),
+    (r"\bxem\s+l\u1ea1i\s+k\u00fd\b", "xem l\u1ea1i k\u1ef9"),
+    (r"\bxe\s+m\u00e1y\s+t\u00ed\b", "xem l\u1ea1i k\u1ef9"),
+    (r"\bskill\s+m\u00e1t\b", "skill map"),
+    (r"\bsql\s+m\u00e1t\b", "skill map"),
+    (r"\bskinaz\b", "skill map"),
+    (r"\bmaplestory\b", "map"),
+)
 _CONTEXT_TERM_BLOCKLIST = {
     "again",
     "anh",
@@ -1033,26 +1151,89 @@ def apply_custom_replacements(text: str) -> str:
     return text
 
 
-def load_voice_context() -> dict[str, int]:
+def load_voice_context_data() -> dict[str, dict[str, int]]:
+    merged_terms: dict[str, int] = {}
+    merged_phrases: dict[str, int] = {}
+    for path in (CONTEXT_FILE, LOCAL_CONTEXT_FILE):
+        try:
+            if not path.exists():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            terms = data.get("terms", {})
+            phrases = data.get("phrases", {})
+            if isinstance(terms, dict):
+                for key, value in terms.items():
+                    clean = str(key).strip()
+                    if clean:
+                        merged_terms[clean] = max(merged_terms.get(clean, 0), int(value))
+            if isinstance(phrases, dict):
+                for key, value in phrases.items():
+                    clean = str(key).strip()
+                    if clean:
+                        merged_phrases[clean] = max(merged_phrases.get(clean, 0), int(value))
+        except Exception as exc:
+            log(f"voice context load skipped | path={path.name} | {type(exc).__name__}: {exc}")
+    return {"terms": merged_terms, "phrases": merged_phrases}
+
+
+def load_local_voice_context_data() -> dict[str, dict[str, int]]:
     try:
-        data = json.loads(CONTEXT_FILE.read_text(encoding="utf-8"))
-        terms = data.get("terms", {}) if isinstance(data, dict) else {}
-        if isinstance(terms, dict):
-            return {str(k): int(v) for k, v in terms.items() if str(k).strip()}
+        data = json.loads(LOCAL_CONTEXT_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            terms = data.get("terms", {})
+            phrases = data.get("phrases", {})
+            return {
+                "terms": {str(k): int(v) for k, v in terms.items() if str(k).strip()} if isinstance(terms, dict) else {},
+                "phrases": {str(k): int(v) for k, v in phrases.items() if str(k).strip()} if isinstance(phrases, dict) else {},
+            }
     except Exception:
         pass
-    return {}
+    return {"terms": {}, "phrases": {}}
 
 
-def save_voice_context(terms: dict[str, int]) -> None:
+def load_voice_context() -> dict[str, int]:
+    return load_voice_context_data()["terms"]
+
+
+def load_voice_phrases() -> dict[str, int]:
+    return load_voice_context_data()["phrases"]
+
+
+def save_voice_context_data(terms: dict[str, int], phrases: dict[str, int]) -> None:
     try:
-        sorted_terms = dict(sorted(terms.items(), key=lambda item: (-item[1], item[0]))[:300])
-        CONTEXT_FILE.write_text(
-            json.dumps({"terms": sorted_terms}, ensure_ascii=False, indent=2),
+        sorted_terms = dict(sorted(terms.items(), key=lambda item: (-item[1], item[0]))[:VOICE_CONTEXT_MAX_TERMS])
+        merged_phrases: dict[str, int] = {}
+        phrase_keys: dict[str, str] = {}
+        for phrase, count in phrases.items():
+            clean = cleanup_pass(str(phrase))
+            if not context_phrase_allowed(clean):
+                continue
+            key = clean.lower()
+            existing = phrase_keys.get(key)
+            if existing:
+                merged_phrases[existing] += int(count)
+            else:
+                phrase_keys[key] = clean
+                merged_phrases[clean] = int(count)
+        sorted_phrases = dict(sorted(merged_phrases.items(), key=lambda item: (-item[1], item[0]))[:VOICE_CONTEXT_MAX_PHRASES])
+        LOCAL_CONTEXT_FILE.write_text(
+            json.dumps({"terms": sorted_terms, "phrases": sorted_phrases}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
     except Exception as exc:
         log(f"voice context save error: {type(exc).__name__}: {exc}")
+
+
+def save_voice_context(terms: dict[str, int]) -> None:
+    data = load_local_voice_context_data()
+    save_voice_context_data(terms, data["phrases"])
+
+
+def save_voice_phrases(phrases: dict[str, int]) -> None:
+    data = load_local_voice_context_data()
+    save_voice_context_data(data["terms"], phrases)
 
 
 def configured_context_terms() -> list[str]:
@@ -1063,6 +1244,50 @@ def configured_context_terms() -> list[str]:
     if isinstance(terms, list):
         return [str(term).strip() for term in terms if str(term).strip()]
     return []
+
+
+def context_phrase_allowed(phrase: str) -> bool:
+    phrase = cleanup_pass(phrase)
+    if any(marker in phrase for marker in _MOJIBAKE_MARKERS):
+        phrase = repair_mojibake(phrase)
+    lower = phrase.lower()
+    if lower in _CONTEXT_PHRASE_BLOCKLIST:
+        return False
+    if not 6 <= len(phrase) <= 90:
+        return False
+    words = phrase.split()
+    if not 3 <= len(words) <= 9 and phrase.lower() not in {"kiểm tra kỹ", "xem lại kỹ", "khởi động lại", "thu nhỏ lại"}:
+        return False
+    if words[-1].lower() in {"về", "để", "có", "phân", "mô", "là", "cái", "và", "như", "kiểu"}:
+        return False
+    return count_transcript_words(phrase) >= 2
+
+
+def configured_context_phrases() -> list[str]:
+    settings = load_settings()
+    if not bool(settings.get("enable_context_memory", True)):
+        return []
+    phrases = settings.get("speech_context_phrases", [])
+    configured = [str(phrase).strip() for phrase in phrases if str(phrase).strip()] if isinstance(phrases, list) else []
+    return list(_PERSONAL_PHRASE_SEEDS) + configured
+
+
+def context_phrases(limit: int = 80) -> list[str]:
+    if not bool(load_settings().get("enable_context_memory", True)):
+        return []
+    learned = load_voice_phrases()
+    ranked = [phrase for phrase, _count in sorted(learned.items(), key=lambda item: (-item[1], item[0]))]
+    merged: list[str] = []
+    seen: set[str] = set()
+    for phrase in configured_context_phrases() + ranked:
+        clean = cleanup_pass(phrase)
+        key = clean.lower()
+        if key not in seen and context_phrase_allowed(clean):
+            seen.add(key)
+            merged.append(clean)
+        if len(merged) >= limit:
+            break
+    return merged
 
 
 def context_terms(limit: int = 80) -> list[str]:
@@ -1093,6 +1318,12 @@ def apply_context_terms(text: str) -> str:
     return text
 
 
+def apply_vietnamese_cleanup_patterns(text: str) -> str:
+    for pattern, replacement in _VIETNAMESE_CLEANUP_PATTERNS:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
+
 def context_term_allowed(term: str) -> bool:
     key = term.strip().lower()
     if not key or key in _CONTEXT_TERM_BLOCKLIST:
@@ -1114,9 +1345,40 @@ def should_learn_context_word(term: str) -> bool:
     return False
 
 
+def extract_personal_phrases(text: str) -> set[str]:
+    clean_text = clean_transcript(text)
+    candidates: set[str] = set()
+    lower = clean_text.lower()
+    for phrase in configured_context_phrases():
+        if phrase.lower() in lower:
+            candidates.add(phrase)
+    for pattern in _PHRASE_LEARN_PATTERNS:
+        for match in re.finditer(pattern, clean_text, flags=re.IGNORECASE):
+            phrase = re.sub(r"\s+", " ", match.group(0)).strip(" .,!?;:")
+            phrase = re.sub(r"\b(?:đúng không|nhé|nha|đấy|ấy|thì|vậy)$", "", phrase, flags=re.IGNORECASE).strip()
+            if context_phrase_allowed(phrase):
+                candidates.add(phrase)
+    return candidates
+
+
+def learn_context_phrases(text: str) -> None:
+    if not bool(load_settings().get("enable_context_memory", True)):
+        return
+    candidates = extract_personal_phrases(text)
+    if not candidates:
+        return
+    phrases = load_voice_phrases()
+    for phrase in candidates:
+        clean = cleanup_pass(phrase)
+        if context_phrase_allowed(clean):
+            phrases[clean] = phrases.get(clean, 0) + 1
+    save_voice_phrases(phrases)
+
+
 def learn_context_terms(text: str) -> None:
     if not bool(load_settings().get("enable_context_memory", True)):
         return
+    learn_context_phrases(text)
     candidates: set[str] = set()
     configured = configured_context_terms()
     for term in configured:
@@ -1140,19 +1402,27 @@ def learn_context_terms(text: str) -> None:
 
 def whisper_initial_prompt() -> str:
     terms = ", ".join(context_terms(60))
+    phrases = ", ".join(context_phrases(35))
     base = (
         "L\u1eddi n\u00f3i ti\u1ebfng Vi\u1ec7t t\u1ef1 nhi\u00ean, "
         "c\u00f3 th\u1ec3 xen k\u1ebd ti\u1ebfng Anh/k\u1ef9 thu\u1eadt. "
         "Gi\u1eef \u0111\u00fang thu\u1eadt ng\u1eef, t\u00ean c\u00f4ng c\u1ee5 "
-        "v\u00e0 ch\u00ednh t\u1ea3 ti\u1ebfng Vi\u1ec7t."
+        "v\u00e0 ch\u00ednh t\u1ea3 ti\u1ebfng Vi\u1ec7t. "
+        "Ng\u01b0\u1eddi n\u00f3i hay giao vi\u1ec7c b\u1eb1ng c\u00e1c c\u1ee5m l\u1ec7nh l\u1eb7p l\u1ea1i."
     )
+    extras: list[str] = []
     if terms:
-        return f"{base} T\u1eeb kh\u00f3a hay d\u00f9ng: {terms}."
+        extras.append(f"T\u1eeb kh\u00f3a hay d\u00f9ng: {terms}.")
+    if phrases:
+        extras.append(f"C\u1ee5m l\u1ec7nh hay d\u00f9ng: {phrases}.")
+    if extras:
+        return f"{base} {' '.join(extras)}"
     return base
 
 
 def cleanup_pass(text: str) -> str:
     text = normalize_technical_terms(text)
+    text = apply_vietnamese_cleanup_patterns(text)
     text = apply_custom_replacements(text)
     text = apply_context_terms(text)
     text = re.sub(r"\b(Ã |á»|á»«|á»«m|á»m)\b[ ,]*", "", text, flags=re.IGNORECASE)
@@ -1323,6 +1593,41 @@ def google_response_alternatives(response: object) -> list[tuple[str, float | No
     return results
 
 
+def transcript_context_score(text: str) -> float:
+    lower = text.lower()
+    score = 0.0
+    seen: set[str] = set()
+    for term in list(_VIETNAMESE_COMMAND_TERMS) + [term.lower() for term in context_terms(50)]:
+        key = term.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        if re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", lower, flags=re.IGNORECASE):
+            score += 0.018 if len(key) < 6 else 0.028
+    for phrase in context_phrases(50):
+        key = phrase.strip().lower()
+        if key and key not in seen and key in lower:
+            seen.add(key)
+            score += 0.04
+    return min(score, 0.24)
+
+
+def transcript_quality_penalty(text: str) -> float:
+    lower = text.lower()
+    penalty = 0.0
+    if any(marker.lower() in lower for marker in _MOJIBAKE_MARKERS):
+        penalty += 0.12
+    if re.search(r"\b(\w{2,})(?:\s+\1\b){2,}", lower, flags=re.IGNORECASE):
+        penalty += 0.06
+    words = count_transcript_words(text)
+    if words <= 2:
+        penalty += 0.04
+    filler_count = len(re.findall(r"\b(?:\u00e0|\u1edd|\u1eeb|\u1eebm|\u1eddm|uh|um)\b", lower, flags=re.IGNORECASE))
+    if words:
+        penalty += min(0.06, filler_count / max(1, words) * 0.18)
+    return penalty
+
+
 def choose_google_alternative(response: object) -> tuple[str, float | None, int]:
     alternatives = google_response_alternatives(response)
     if not alternatives:
@@ -1337,7 +1642,9 @@ def choose_google_alternative(response: object) -> tuple[str, float | None, int]
             continue
         confidence_score = confidence if confidence is not None else 0.55
         length_score = min(0.08, count_transcript_words(clean) * 0.002)
-        score = confidence_score + length_score
+        context_score = transcript_context_score(clean)
+        penalty = transcript_quality_penalty(clean)
+        score = confidence_score + length_score + context_score - penalty
         if score > best_score:
             best_raw = raw
             best_clean = clean
@@ -2559,6 +2866,7 @@ class MicIconApp:
         """Transcribe Vietnamese speech. Prefer Google for dictation accuracy, fallback to Whisper offline."""
         duration = self._audio_duration_seconds(audio)
         self.google_confidence_scores.clear()
+        google_candidate = ""
         try:
             if duration > GOOGLE_SINGLE_PASS_MAX_SECONDS:
                 log(f"long audio detected; using google chunks | duration={duration:.1f}s")
@@ -2566,6 +2874,7 @@ class MicIconApp:
             else:
                 google_text = self._transcribe_google_once(audio)
             if google_text:
+                google_candidate = google_text
                 avg_confidence = (
                     sum(self.google_confidence_scores) / len(self.google_confidence_scores)
                     if self.google_confidence_scores
@@ -2575,7 +2884,18 @@ class MicIconApp:
                     f"transcribe engine=google | confidence_avg={format_confidence_percent(avg_confidence)} | "
                     f"text={google_text[:80]}"
                 )
-                return google_text
+                if (
+                    avg_confidence is not None
+                    and avg_confidence < GOOGLE_LOW_CONFIDENCE_FALLBACK_THRESHOLD
+                    and self.whisper_model is not None
+                ):
+                    log(
+                        f"google confidence below fallback threshold | "
+                        f"confidence={format_confidence_percent(avg_confidence)} | "
+                        f"threshold={GOOGLE_LOW_CONFIDENCE_FALLBACK_THRESHOLD * 100:.0f}%"
+                    )
+                else:
+                    return google_text
         except sr.UnknownValueError:
             log("google unrecognized; falling back to whisper")
         except Exception as exc:
@@ -2585,52 +2905,61 @@ class MicIconApp:
                     log(f"retrying google with chunks after error | duration={duration:.1f}s")
                     google_text = self._transcribe_google_chunked(audio)
                     if google_text:
+                        google_candidate = google_text
                         return google_text
                 except Exception as retry_exc:
                     log(f"google chunk retry failed: {type(retry_exc).__name__}: {retry_exc}")
             log("falling back to whisper")
 
         if self.whisper_model is None:
+            if google_candidate:
+                return google_candidate
             raise sr.UnknownValueError()
 
         wav_data = audio.get_wav_data()
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         try:
-            tmp.write(wav_data)
-            tmp.close()
-            result = self.whisper_model.transcribe(
-                tmp.name,
-                language="vi",
-                task="transcribe",
-                fp16=False,
-                condition_on_previous_text=False,
-                temperature=0,
-                beam_size=5,
-                best_of=5,
-                no_speech_threshold=0.75,
-                logprob_threshold=-1.0,
-                compression_ratio_threshold=2.4,
-                initial_prompt=whisper_initial_prompt(),
-            )
-            # BÃ¡Â»Â qua nÃ¡ÂºÂ¿u Whisper khÃƒÂ´ng chÃ¡ÂºÂ¯c cÃƒÂ³ giÃ¡Â»Âng nÃƒÂ³i (hallucination tÃ¡Â»Â« tiÃ¡ÂºÂ¿ng Ã¡Â»â€œn)
-            segments = result.get("segments", [])
-            if segments:
-                avg_no_speech = sum(s.get("no_speech_prob", 0) for s in segments) / len(segments)
-                log(f"whisper no_speech_prob={avg_no_speech:.2f}")
-                if avg_no_speech > 0.75:
-                    raise sr.UnknownValueError()
-            elif not result["text"].strip():
-                raise sr.UnknownValueError()
-            whisper_raw = str(result["text"])
-            whisper_text = clean_transcript(whisper_raw)
-            if whisper_text and whisper_text != whisper_raw.strip():
-                log(f"cleanup | raw={whisper_raw[:100]} | clean={whisper_text[:100]}")
-            return whisper_text
-        finally:
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
             try:
-                os.unlink(tmp.name)
-            except OSError:
-                pass
+                tmp.write(wav_data)
+                tmp.close()
+                result = self.whisper_model.transcribe(
+                    tmp.name,
+                    language="vi",
+                    task="transcribe",
+                    fp16=False,
+                    condition_on_previous_text=False,
+                    temperature=0,
+                    beam_size=5,
+                    best_of=5,
+                    no_speech_threshold=0.75,
+                    logprob_threshold=-1.0,
+                    compression_ratio_threshold=2.4,
+                    initial_prompt=whisper_initial_prompt(),
+                )
+                # Ignore likely Whisper hallucination when it is not confident that speech exists.
+                segments = result.get("segments", [])
+                if segments:
+                    avg_no_speech = sum(s.get("no_speech_prob", 0) for s in segments) / len(segments)
+                    log(f"whisper no_speech_prob={avg_no_speech:.2f}")
+                    if avg_no_speech > 0.75:
+                        raise sr.UnknownValueError()
+                elif not result["text"].strip():
+                    raise sr.UnknownValueError()
+                whisper_raw = str(result["text"])
+                whisper_text = clean_transcript(whisper_raw)
+                if whisper_text and whisper_text != whisper_raw.strip():
+                    log(f"cleanup | raw={whisper_raw[:100]} | clean={whisper_text[:100]}")
+                return whisper_text
+            finally:
+                try:
+                    os.unlink(tmp.name)
+                except OSError:
+                    pass
+        except Exception as exc:
+            if google_candidate:
+                log(f"whisper fallback failed; keeping google text | {type(exc).__name__}: {exc}")
+                return google_candidate
+            raise
 
     def listen_worker(self, auto_stop_after_phrase: bool = False, session_id: int = 0) -> None:
         target_hwnd = self.active_target_hwnd or self.last_target_hwnd

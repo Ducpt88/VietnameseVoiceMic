@@ -37,7 +37,9 @@ try {
 
   $Preserve = @(
     "voice-mic-settings.json",
+    "voice-mic-settings.local.json",
     "voice-context.json",
+    "voice-context.local.json",
     "voice-mic.log",
     "voice-update.log",
     "voice-targets.json",

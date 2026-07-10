@@ -1,12 +1,10 @@
 {
-  "preferred_microphone": "BKD-11 Pro Audio",
+  "preferred_microphone": "",
   "microphone_name_hints": [
-    "BKD-11 Pro Audio",
-    "UGREEN Camera 2K",
-    "USB Audio Device",
-    "BKD-11",
     "Microphone",
-    "Headset"
+    "Headset",
+    "USB Audio Device",
+    "External Microphone"
   ],
   "enable_context_memory": true,
   "enable_particle_effect": true,
@@ -14,7 +12,7 @@
   "enable_whisper_fallback": false,
   "whisper_model": "base",
   "auto_update_enabled": true,
-  "update_manifest_url": "",
+  "update_manifest_url": "https://github.com/Ducpt88/VietnameseVoiceMic/releases/latest/download/version.json",
   "speech_cleanup_replacements": [
     {
       "pattern": "\\bvoi\\b",
@@ -39,6 +37,36 @@
     {
       "pattern": "\\bvoice mic\\b",
       "replacement": "Voice Mic",
+      "regex": true
+    },
+    {
+      "pattern": "\\bcon\\s+áp\\b",
+      "replacement": "con app",
+      "regex": true
+    },
+    {
+      "pattern": "\\bthích\\s+lại\\b",
+      "replacement": "fix lại",
+      "regex": true
+    },
+    {
+      "pattern": "\\btối\\s+về\\b",
+      "replacement": "tối ưu về",
+      "regex": true
+    },
+    {
+      "pattern": "\\bkiểm\\s+tra\\s+ký\\b",
+      "replacement": "kiểm tra kỹ",
+      "regex": true
+    },
+    {
+      "pattern": "\\bskill\\s+mát\\b",
+      "replacement": "skill map",
+      "regex": true
+    },
+    {
+      "pattern": "\\bsql\\s+mát\\b",
+      "replacement": "skill map",
       "regex": true
     }
   ],
@@ -66,6 +94,45 @@
     "backend",
     "video format",
     "text",
-    "cleanup"
+    "cleanup",
+    "dự án",
+    "giao diện",
+    "tính năng",
+    "nhận diện",
+    "giọng nói",
+    "micro",
+    "lệnh",
+    "ra lệnh",
+    "kiểm tra kỹ",
+    "chỉnh sửa",
+    "fix lại",
+    "tối ưu",
+    "bổ sung",
+    "cập nhật",
+    "khởi động",
+    "mở rộng",
+    "thu nhỏ",
+    "kéo lên",
+    "kéo xuống",
+    "chính xác"
+  ],
+  "speech_context_phrases": [
+    "kiểm tra kỹ",
+    "xem lại kỹ",
+    "chỉnh sửa lại",
+    "bổ sung phần này",
+    "tối ưu phần này",
+    "khởi động lại",
+    "cho tôi xem nào",
+    "theo đúng mục tiêu",
+    "không đúng mục tiêu",
+    "không bị cắt xén",
+    "hiển thị đầy đủ",
+    "mở rộng bên trên",
+    "mở rộng bên dưới",
+    "thu nhỏ lại",
+    "kéo lên kéo xuống",
+    "cập nhật thực tế",
+    "báo cáo chính xác"
   ]
 }
